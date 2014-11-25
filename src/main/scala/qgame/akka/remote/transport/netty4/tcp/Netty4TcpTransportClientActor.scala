@@ -3,7 +3,7 @@ package qgame.akka.remote.transport.netty4.tcp
 import java.net.{ConnectException, UnknownHostException}
 import java.util.concurrent.CancellationException
 
-import akka.actor.{Actor, ActorLogging, Props}
+import akka.actor._
 import akka.remote.transport.AssociationHandle
 import akka.remote.transport.Transport.InvalidAssociationException
 import io.netty.bootstrap
@@ -26,6 +26,8 @@ class Netty4TcpTransportClientActor(configuration:Netty4Configuration) extends A
   private var clientBootstrap :Bootstrap = _
   private var clientEventLoopGroup :EventLoopGroup = _
   private var allChannelGroup: ChannelGroup = _
+  private var associatedChannel:Map[Address,ActorRef] = Map.empty
+
   override def receive: Receive = {
     case Init =>
       try{
@@ -45,7 +47,11 @@ class Netty4TcpTransportClientActor(configuration:Netty4Configuration) extends A
   private def initialized():Actor.Receive ={
     case Associate(remoteAddress,associatePromise)=>
       log.debug("associate command received ,for remote address :{},at :{}",remoteAddress,self)
-      //FIXME ,the socket is connect to remote ,so I think this socket need close when a new socket is connected to the target remote
+      //Note the socket is connect to remote ,so I think this socket need close when a new socket is connected to the target remote
+      associatedChannel.get(remoteAddress).foreach{
+        previousAssociator =>
+          previousAssociator ! RequestShutdown(duplicated = true)
+      }
       import scala.concurrent.ExecutionContext.Implicits.global
       Netty4TcpTransport.addressToSocketAddress(remoteAddress).onComplete{
         case Success(remoteSocketAddress) =>
@@ -68,7 +74,7 @@ class Netty4TcpTransportClientActor(configuration:Netty4Configuration) extends A
                   log.debug("success client associatePromise with handler at :{}",self)
                   associatePromise.success(handler)
                 }
-                val associator = context.actorOf(Props.create(classOf[Netty4TcpTransportAssociator],configuration.FlushInternal,channel,op))
+                val associator = context.actorOf(Props.create(classOf[Netty4TcpTransportAssociator],remoteAddress,configuration.FlushInternal,channel,op))
                 associator ! AssociateChannelOutBound
               case Failure(exception)=>
                 log.error(exception,"could not connect to remote socket address :{},for actor address :{}",remoteSocketAddress,remoteAddress)
@@ -93,6 +99,10 @@ class Netty4TcpTransportClientActor(configuration:Netty4Configuration) extends A
           }
           associatePromise.failure(associateException)
       }
+    case Associated(associatedAddress)=>
+      associatedChannel += (associatedAddress -> sender())
+    case DeAssociated(deAssociatedAddress)=>
+      associatedChannel -= deAssociatedAddress
   }
 
 

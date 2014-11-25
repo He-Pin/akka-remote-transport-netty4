@@ -17,6 +17,7 @@ import qgame.akka.remote.transport.netty4.{Configuration, Platform}
 import scala.concurrent.duration.Duration
 import scala.concurrent.{ExecutionContext, Future, Promise, blocking}
 import scala.language.implicitConversions
+import scala.util.{Failure, Success}
 
 
 /**
@@ -188,6 +189,17 @@ object Netty4TcpTransport {
       if (configuration.TcpKeepCount > 0){
         bootstrap.option(EpollChannelOption.TCP_KEEPCNT,int2Integer(configuration.TcpKeepCount))
       }
+    }
+  }
+  
+  def closeChannelGracefully(channel:Channel)(op:Channel=>Any)={
+    import scala.concurrent.ExecutionContext.Implicits.global
+    channel.disconnect().flatMap(_.close()).onComplete{
+      case Success(closedChannel)=>
+        op(closedChannel)
+      case Failure(e) =>
+        //Ignore
+        channel.close()
     }
   }
 }

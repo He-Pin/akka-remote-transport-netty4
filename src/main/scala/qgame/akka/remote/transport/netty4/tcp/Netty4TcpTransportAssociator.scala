@@ -2,7 +2,7 @@ package qgame.akka.remote.transport.netty4.tcp
 
 import java.net.InetSocketAddress
 
-import akka.actor.{Actor, ActorLogging, Address, Cancellable}
+import akka.actor._
 import akka.remote.transport.AssociationHandle
 import akka.remote.transport.AssociationHandle.HandleEventListener
 import akka.util.ByteString
@@ -16,7 +16,7 @@ import scala.util.{Failure, Success}
 /**
  * Created by kerr.
  */
-class Netty4TcpTransportAssociator(flushDuration:FiniteDuration,channel: Channel, op: AssociationHandle => Any) extends Actor with ActorLogging{
+class Netty4TcpTransportAssociator(remoteAddress:Address,flushDuration:FiniteDuration,channel: Channel, op: AssociationHandle => Any) extends Actor with ActorLogging{
   private var flushTickTask :Cancellable = _
   override def receive: Receive = {
     case AssociateChannelInBound =>
@@ -78,8 +78,7 @@ class Netty4TcpTransportAssociator(flushDuration:FiniteDuration,channel: Channel
     case HandleEventListenerRegisterFailure(exception) =>
       log.error(exception,"handle event listener register error for channel :{} at :{}",channel,self)
       import qgame.akka.remote.transport.netty4.tcp.Netty4TcpTransport._
-
-import scala.concurrent.ExecutionContext.Implicits.global
+      import scala.concurrent.ExecutionContext.Implicits.global
       channel.disconnect().onComplete{
         case Success(underlyingChannel)=>
           underlyingChannel.close()
@@ -97,6 +96,7 @@ import scala.concurrent.ExecutionContext.Implicits.global
       log.debug("going to schedule the flush tick ,duration :{} at :{}",flushDuration,self)
       import scala.concurrent.ExecutionContext.Implicits.global
       flushTickTask = context.system.scheduler.schedule(flushDuration/3,flushDuration,self,FlushTick)
+      context.parent ! Associated(remoteAddress)
       context.become(associated())
   }
 
@@ -108,14 +108,29 @@ import scala.concurrent.ExecutionContext.Implicits.global
     case ChannelInActive(underlyingChannel)=>
       //channel is broken
       log.debug("channel inactive ,current associated, channel:{} at:{}",underlyingChannel,self)
+      context.parent ! DeAssociated(remoteAddress)
       context.stop(self)
     case ChannelExceptionCaught(underlyingChannel,exception)=>
       //channel exception
       log.error(exception,"channel inactive ,current associated, channel:{} at:{}",underlyingChannel,self)
-    case RequestShutdown =>
+    case RequestShutdown(duplicated) =>
       log.debug("request shutdown ,shutdown channel :{},at :{}",channel,self)
       channel.flush()
-      sender() ! AssociatorShutdownACK
+      val replyTo = sender()
+      Netty4TcpTransport.closeChannelGracefully(channel){
+        closedChannel =>
+          replyTo ! AssociatorShutdownACK
+      }
+      if (duplicated){
+        context.become(waitingDuplicatedShutDown())
+      }
+  }
+
+  private def waitingDuplicatedShutDown():Actor.Receive = {
+    case ChannelInActive(underlyingChannel)=>
+      //channel is broken
+      log.debug("channel inactive ,current associated, channel:{} at:{}",underlyingChannel,self)
+      context.stop(self)
   }
 
   @throws[Exception](classOf[Exception])
@@ -133,9 +148,13 @@ case object AssociateChannelInBound extends AssociatorCommand
 
 case object AssociateChannelOutBound extends AssociatorCommand
 
-case object RequestShutdown extends AssociatorCommand
+case class RequestShutdown(duplicated:Boolean) extends AssociatorCommand
 
 case object FlushTick extends AssociatorCommand
+
+case class Associated(remoteAddress:Address)
+
+case class DeAssociated(remoteAddress:Address)
 
 case object AssociatorShutdownACK
 
@@ -151,16 +170,10 @@ case class Netty4TcpTransportAssociationHandle(channel: Channel,localAddress:Add
   override def disassociate(): Unit = {
     if (channel.isActive){
       channel.flush()
-      import Netty4TcpTransport._
-      import scala.concurrent.ExecutionContext.Implicits.global
-      channel.disconnect().onComplete{
-        case Success(underlyingChannel)=>
-          underlyingChannel.close()
-        case Failure(e)=>
-          channel.close()
-      }
-    }else{
-      channel.close()
+    }
+    Netty4TcpTransport.closeChannelGracefully(channel){
+      closedChannel =>
+        //NOOP
     }
   }
 
