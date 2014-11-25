@@ -2,20 +2,22 @@ package qgame.akka.remote.transport.netty4.tcp
 
 import java.net.InetSocketAddress
 
-import akka.actor.{Actor, ActorLogging, Address}
+import akka.actor.{Actor, ActorLogging, Address, Cancellable}
 import akka.remote.transport.AssociationHandle
 import akka.remote.transport.AssociationHandle.HandleEventListener
 import akka.util.ByteString
 import io.netty.buffer.Unpooled
-import io.netty.channel.{Channel, ChannelFuture, ChannelFutureListener}
+import io.netty.channel.Channel
 
 import scala.concurrent.Promise
+import scala.concurrent.duration.FiniteDuration
 import scala.util.{Failure, Success}
 
 /**
  * Created by kerr.
  */
-class Netty4TcpTransportAssociator(channel: Channel, op: AssociationHandle => Any) extends Actor with ActorLogging{
+class Netty4TcpTransportAssociator(flushDuration:FiniteDuration,channel: Channel, op: AssociationHandle => Any) extends Actor with ActorLogging{
+  private var flushTickTask :Cancellable = _
   override def receive: Receive = {
     case AssociateChannelInBound =>
       //first register the associator
@@ -75,7 +77,16 @@ class Netty4TcpTransportAssociator(channel: Channel, op: AssociationHandle => An
       context.become(waitingRegisterHandlerEventListenerACK())
     case HandleEventListenerRegisterFailure(exception) =>
       log.error(exception,"handle event listener register error for channel :{} at :{}",channel,self)
-      channel.close()
+      import qgame.akka.remote.transport.netty4.tcp.Netty4TcpTransport._
+
+import scala.concurrent.ExecutionContext.Implicits.global
+      channel.disconnect().onComplete{
+        case Success(underlyingChannel)=>
+          underlyingChannel.close()
+        case Failure(e)=>
+          log.error(e,"error occur when disconnect channel at :{}",self)
+          channel.close()
+      }
   }
 
   private def waitingRegisterHandlerEventListenerACK() :Actor.Receive = {
@@ -83,10 +94,17 @@ class Netty4TcpTransportAssociator(channel: Channel, op: AssociationHandle => An
       log.debug("register handle event listener success :{}",self)
       channel.config().setAutoRead(true)
       log.debug("becoming associated at :{}",self)
+      log.debug("going to schedule the flush tick ,duration :{} at :{}",flushDuration,self)
+      import scala.concurrent.ExecutionContext.Implicits.global
+      flushTickTask = context.system.scheduler.schedule(flushDuration/3,flushDuration,self,FlushTick)
       context.become(associated())
   }
 
   private def associated():Actor.Receive = {
+    case FlushTick =>
+      if (channel.isActive){
+        channel.flush()
+      }
     case ChannelInActive(underlyingChannel)=>
       //channel is broken
       log.debug("channel inactive ,current associated, channel:{} at:{}",underlyingChannel,self)
@@ -96,12 +114,16 @@ class Netty4TcpTransportAssociator(channel: Channel, op: AssociationHandle => An
       log.error(exception,"channel inactive ,current associated, channel:{} at:{}",underlyingChannel,self)
     case RequestShutdown =>
       log.debug("request shutdown ,shutdown channel :{},at :{}",channel,self)
-      val replyTo = sender()
-      channel.writeAndFlush(channel.alloc().buffer()).addListener(new ChannelFutureListener {
-        override def operationComplete(future: ChannelFuture): Unit = {
-          replyTo ! AssociatorShutdownACK
-        }
-      })
+      channel.flush()
+      sender() ! AssociatorShutdownACK
+  }
+
+  @throws[Exception](classOf[Exception])
+  override def postStop(): Unit = {
+    if (flushTickTask ne null){
+      flushTickTask.cancel()
+    }
+    super.postStop()
   }
 }
 
@@ -112,6 +134,8 @@ case object AssociateChannelInBound extends AssociatorCommand
 case object AssociateChannelOutBound extends AssociatorCommand
 
 case object RequestShutdown extends AssociatorCommand
+
+case object FlushTick extends AssociatorCommand
 
 case object AssociatorShutdownACK
 
@@ -126,17 +150,28 @@ case class Netty4TcpTransportAssociationHandle(channel: Channel,localAddress:Add
   private val innerReadHandlerPromise = Promise[HandleEventListener]()
   override def disassociate(): Unit = {
     if (channel.isActive){
-      channel.close()
+      channel.flush()
+      import Netty4TcpTransport._
+      channel.disconnect().onComplete{
+        case Success(underlyingChannel)=>
+          underlyingChannel.close()
+        case Failure(e)=>
+          channel.close()
+      }
     }else{
       channel.close()
     }
   }
 
   override def write(payload: ByteString): Boolean = {
-    if (channel.isWritable){
-      //FIXME need optimize,if only write here,will cause the system pause
-      channel.writeAndFlush(Unpooled.wrappedBuffer(payload.asByteBuffer))
-      true
+    if (channel.isActive){
+      if (channel.isWritable){
+        channel.write(Unpooled.wrappedBuffer(payload.asByteBuffer))
+        true
+      }else{
+        channel.flush()
+        false
+      }
     }else{
       false
     }

@@ -126,7 +126,7 @@ class Netty4TcpTransportServerActor(configuration:Netty4Configuration) extends A
         log.debug("notify server listener InboundAssociation at :{}",self)
         listener.notify(InboundAssociation(handler))
       }
-      val associator = context.actorOf(Props.create(classOf[Netty4TcpTransportAssociator],channel,op))
+      val associator = context.actorOf(Props.create(classOf[Netty4TcpTransportAssociator],configuration.FlushInternal,channel,op))
       associator ! AssociateChannelInBound
     case ChannelInActive(channel) =>
       //add to channel group
@@ -165,6 +165,7 @@ class Netty4TcpTransportServerActor(configuration:Netty4Configuration) extends A
     allChannelGroup = new DefaultChannelGroup(new DefaultEventLoop())
 
     val nettyServerMasterActor = self
+    Netty4TcpTransport.setupServerBootStrapOption(serverBootstrap,configuration)
     serverBootstrap.channel{
       if (native){
         classOf[EpollServerSocketChannel]
@@ -172,10 +173,6 @@ class Netty4TcpTransportServerActor(configuration:Netty4Configuration) extends A
         classOf[NioServerSocketChannel]
       }
     }.localAddress(bindAddress)
-      .option(ChannelOption.SO_BACKLOG, int2Integer(configuration.Backlog))
-      .option(ChannelOption.SO_REUSEADDR,boolean2Boolean(configuration.TcpReuseADDR))
-      .childOption(ChannelOption.TCP_NODELAY,boolean2Boolean(configuration.TcpNoDelay))
-      .childOption(ChannelOption.SO_KEEPALIVE,boolean2Boolean(configuration.TcpKeepAlive))
       .childHandler{
       if (native){
         new ChannelInitializer[EpollSocketChannel] {

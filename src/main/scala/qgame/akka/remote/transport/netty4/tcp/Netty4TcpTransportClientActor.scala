@@ -68,7 +68,7 @@ class Netty4TcpTransportClientActor(configuration:Netty4Configuration) extends A
                   log.debug("success client associatePromise with handler at :{}",self)
                   associatePromise.success(handler)
                 }
-                val associator = context.actorOf(Props.create(classOf[Netty4TcpTransportAssociator],channel,op))
+                val associator = context.actorOf(Props.create(classOf[Netty4TcpTransportAssociator],configuration.FlushInternal,channel,op))
                 associator ! AssociateChannelOutBound
               case Failure(exception)=>
                 log.error(exception,"could not connect to remote socket address :{},for actor address :{}",remoteSocketAddress,remoteAddress)
@@ -104,15 +104,14 @@ class Netty4TcpTransportClientActor(configuration:Netty4Configuration) extends A
     //this may need change
     allChannelGroup = new DefaultChannelGroup(new DefaultEventLoop())
     val nettyClientMasterActor = self
+    Netty4TcpTransport.setupClientBootStrapOption(clientBootstrap,configuration)
     clientBootstrap.group(clientEventLoopGroup).channel{
       if (native){
         classOf[EpollSocketChannel]
       }else{
         classOf[NioSocketChannel]
       }
-    }.option(ChannelOption.TCP_NODELAY,boolean2Boolean(configuration.TcpNoDelay))
-      .option(ChannelOption.SO_KEEPALIVE,boolean2Boolean(configuration.TcpKeepAlive))
-      .handler{
+    }.handler{
       if (native){
         new ChannelInitializer[EpollSocketChannel] {
           override def initChannel(socketChannel: EpollSocketChannel): Unit = {
