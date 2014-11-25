@@ -152,6 +152,7 @@ case class Netty4TcpTransportAssociationHandle(channel: Channel,localAddress:Add
     if (channel.isActive){
       channel.flush()
       import Netty4TcpTransport._
+      import scala.concurrent.ExecutionContext.Implicits.global
       channel.disconnect().onComplete{
         case Success(underlyingChannel)=>
           underlyingChannel.close()
