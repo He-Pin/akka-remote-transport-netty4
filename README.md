@@ -16,7 +16,7 @@ using it like this
   }
 }
 ```
-
+```
 benckmark
 Starting benchmark of 500000 messages with burst size 5000 and payload size 100
 It took 597 ms to deliver 15000 messages, throughtput 25125 msg/s, latest round-trip 141 ms, remaining 485000 of 500000
@@ -33,4 +33,4 @@ It took 540 ms to deliver 40000 messages, throughtput 74074 msg/s, latest round-
 It took 518 ms to deliver 40000 messages, throughtput 77220 msg/s, latest round-trip 63 ms, remaining 55000 of 500000
 It took 558 ms to deliver 45000 messages, throughtput 80645 msg/s, latest round-trip 64 ms, remaining 10000 of 500000
 == It took 7147 ms to deliver 500000 messages, throughtput 69959 msg/s, max round-trip 251 ms, burst size 5000, payload size 100
-
+```
