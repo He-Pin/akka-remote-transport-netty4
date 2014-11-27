@@ -1,5 +1,7 @@
 akka-remote-transport-netty4
 ============================
+Only TCP support now.on UDP no SSL no Docker support,will add Soon
+and the document will udpate when I come home.
 
 using it like this
 ```
