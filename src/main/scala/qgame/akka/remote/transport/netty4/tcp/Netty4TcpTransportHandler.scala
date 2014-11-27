@@ -1,37 +1,38 @@
 package qgame.akka.remote.transport.netty4.tcp
 
 import akka.actor.ActorRef
-import akka.remote.transport.AssociationHandle.{Unknown, Disassociated, InboundPayload, HandleEventListener}
+import akka.remote.transport.AssociationHandle.{InboundPayload, Disassociated, HandleEventListener, Unknown}
 import akka.util.ByteString
 import io.netty.buffer.ByteBuf
-import io.netty.channel.{Channel, ChannelHandlerContext, SimpleChannelInboundHandler}
+import io.netty.channel.{Channel, ChannelHandlerContext, ChannelInboundHandlerAdapter}
 
 import scala.util.control.NonFatal
 
 /**
  * Created by kerr.
  */
-class Netty4TcpTransportHandler(master:ActorRef) extends SimpleChannelInboundHandler[ByteBuf]{
+class Netty4TcpTransportHandler(master:ActorRef) extends ChannelInboundHandlerAdapter{
   private var listener :HandleEventListener = _
   private var associator:ActorRef = _
-  override def channelRead0(channelHandlerContext: ChannelHandlerContext, msg: ByteBuf): Unit = {
-    val payload = {
-      val length = msg.readableBytes()
-      val bytesArray = new Array[Byte](length)
-      msg.readBytes(bytesArray)
-      ByteString(bytesArray)
+
+
+  override def channelRead(ctx: ChannelHandlerContext, msg: scala.Any): Unit = {
+    val byteBuf = msg.asInstanceOf[ByteBuf]
+    val readableBytes = byteBuf.readableBytes()
+    if (readableBytes > 0 ){
+      val bytesArray = new Array[Byte](byteBuf.readableBytes())
+      byteBuf.readBytes(bytesArray)
+      listener.notify(InboundPayload(ByteString.fromArray(bytesArray)))
     }
-    listener.notify(InboundPayload(payload))
+    byteBuf.release()
   }
 
   override def channelActive(ctx: ChannelHandlerContext): Unit = {
-    println("channelActive at :"+ctx.channel())
     ctx.channel().config().setAutoRead(false)
     master ! ChannelActive(ctx.channel())
   }
 
   override def channelInactive(ctx: ChannelHandlerContext): Unit = {
-    println("channelInactive at :"+ctx.channel())
     master ! ChannelInActive(ctx.channel())
     if (associator ne null){
       associator ! ChannelInActive(ctx.channel())
@@ -45,7 +46,6 @@ class Netty4TcpTransportHandler(master:ActorRef) extends SimpleChannelInboundHan
   }
 
   override def exceptionCaught(ctx: ChannelHandlerContext, cause: Throwable): Unit = {
-    println("exceptionCaught at :"+ctx.channel())
     cause match {
       case NonFatal(e)=>
         if (associator ne null){
@@ -61,14 +61,6 @@ class Netty4TcpTransportHandler(master:ActorRef) extends SimpleChannelInboundHan
   }
 
   override def userEventTriggered(ctx: ChannelHandlerContext, event:AnyRef): Unit = {
-    println(
-      s"""-------------------------------------------
-        |           userEventTriggered
-        |--------------------------------------------
-        |event :${event.getClass}
-        |--------------------------------------------
-      """.stripMargin)
-    println("userEventTriggered at :"+ctx.channel())
     event match {
       case RegisterAssociator(handlerAssociator)=>
         associator = handlerAssociator

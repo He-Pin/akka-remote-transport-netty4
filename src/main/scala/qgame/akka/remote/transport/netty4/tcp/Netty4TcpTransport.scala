@@ -283,5 +283,7 @@ case class Netty4Configuration(configuration: Configuration) {
   require(TcpKeepCount >= 0, s"Setting 'tcp-keep-count' must >= 0 ,but you provide $TcpKeepCount")
 
   val FlushInternal = Duration(configuration.getDuration("flush-internal", timeUnit = TimeUnit.MILLISECONDS).getOrElse(5l), TimeUnit.MILLISECONDS)
-  
+
+  val AutoFlush = configuration.getBoolean("autoFlush").getOrElse(throw new IllegalArgumentException("must set up autoFlush in akka.remote.netty4.tcp"))
+
 }

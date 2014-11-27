@@ -128,7 +128,12 @@ class Netty4TcpTransportServerActor(configuration:Netty4Configuration) extends A
       }
       val remoteAddress = Netty4TcpTransport.inetAddressToActorAddress(channel.remoteAddress().asInstanceOf[InetSocketAddress])
       log.debug("remote client connected in,remote address :{}",remoteAddress)
-      val associator = context.actorOf(Props.create(classOf[Netty4TcpTransportAssociator],remoteAddress,configuration.FlushInternal,channel,op))
+      val associator = context.actorOf(Props.create(classOf[Netty4TcpTransportAssociator],
+        remoteAddress,
+        configuration.FlushInternal,
+        channel,
+        boolean2Boolean(configuration.AutoFlush),
+        op))
       associator ! AssociateChannelInBound
     case ChannelInActive(channel) =>
       //add to channel group

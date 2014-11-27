@@ -74,7 +74,12 @@ class Netty4TcpTransportClientActor(configuration:Netty4Configuration) extends A
                   log.debug("success client associatePromise with handler at :{}",self)
                   associatePromise.success(handler)
                 }
-                val associator = context.actorOf(Props.create(classOf[Netty4TcpTransportAssociator],remoteAddress,configuration.FlushInternal,channel,op))
+                val associator = context.actorOf(Props.create(classOf[Netty4TcpTransportAssociator],
+                  remoteAddress,
+                  configuration.FlushInternal,
+                  channel,
+                  boolean2Boolean(configuration.AutoFlush),
+                  op))
                 associator ! AssociateChannelOutBound
               case Failure(exception)=>
                 log.error(exception,"could not connect to remote socket address :{},for actor address :{}",remoteSocketAddress,remoteAddress)

@@ -6,7 +6,6 @@ import akka.actor._
 import akka.remote.transport.AssociationHandle
 import akka.remote.transport.AssociationHandle.HandleEventListener
 import akka.util.ByteString
-import io.netty.buffer.Unpooled
 import io.netty.channel.Channel
 
 import scala.concurrent.Promise
@@ -16,7 +15,7 @@ import scala.util.{Failure, Success}
 /**
  * Created by kerr.
  */
-class Netty4TcpTransportAssociator(remoteAddress:Address,flushDuration:FiniteDuration,channel: Channel, op: AssociationHandle => Any) extends Actor with ActorLogging{
+class Netty4TcpTransportAssociator(remoteAddress:Address,flushDuration:FiniteDuration,channel: Channel, autoFlush:Boolean,op: AssociationHandle => Any) extends Actor with ActorLogging{
   private var flushTickTask :Cancellable = _
   override def receive: Receive = {
     case AssociateChannelInBound =>
@@ -38,7 +37,7 @@ class Netty4TcpTransportAssociator(remoteAddress:Address,flushDuration:FiniteDur
       //going to notify inbound association ,and waiting the
       //read register
       log.debug("register associator success at:{}",self)
-      val associationHandler = Netty4TcpTransportAssociationHandle(channel)
+      val associationHandler = Netty4TcpTransportAssociationHandle(channel,autoFlush)
       log.debug(
         s"""
           |~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -78,7 +77,8 @@ class Netty4TcpTransportAssociator(remoteAddress:Address,flushDuration:FiniteDur
     case HandleEventListenerRegisterFailure(exception) =>
       log.error(exception,"handle event listener register error for channel :{} at :{}",channel,self)
       import qgame.akka.remote.transport.netty4.tcp.Netty4TcpTransport._
-      import scala.concurrent.ExecutionContext.Implicits.global
+
+import scala.concurrent.ExecutionContext.Implicits.global
       channel.disconnect().onComplete{
         case Success(underlyingChannel)=>
           underlyingChannel.close()
@@ -93,9 +93,16 @@ class Netty4TcpTransportAssociator(remoteAddress:Address,flushDuration:FiniteDur
       log.debug("register handle event listener success :{}",self)
       channel.config().setAutoRead(true)
       log.debug("becoming associated at :{}",self)
-      log.debug("going to schedule the flush tick ,duration :{} at :{}",flushDuration,self)
-      import scala.concurrent.ExecutionContext.Implicits.global
-      flushTickTask = context.system.scheduler.schedule(flushDuration/3,flushDuration,self,FlushTick)
+      if (!autoFlush){
+        log.debug("going to schedule the flush tick ,duration :{} at :{}",flushDuration,self)
+        //flushTickTask = context.system.scheduler.schedule(flushDuration/7,flushDuration,self,FlushTick)
+        import context.dispatcher
+        flushTickTask = context.system.scheduler.schedule(flushDuration/7,flushDuration){
+          if (channel.isActive){
+            channel.flush()
+          }
+        }
+      }
       context.parent ! Associated(remoteAddress)
       context.become(associated())
   }
@@ -165,8 +172,9 @@ case class HandleEventListenerRegisterSuccess(handleEventListener: HandleEventLi
 case class HandleEventListenerRegisterFailure(exception: Throwable) extends HandleEventListenerRegisterACK
 
 
-case class Netty4TcpTransportAssociationHandle(channel: Channel,localAddress:Address,remoteAddress:Address) extends AssociationHandle {
+case class Netty4TcpTransportAssociationHandle(channel: Channel,autoFlush:Boolean,localAddress:Address,remoteAddress:Address) extends AssociationHandle {
   private val innerReadHandlerPromise = Promise[HandleEventListener]()
+  private val allocator = channel.alloc()
   override def disassociate(): Unit = {
     if (channel.isActive){
       channel.flush()
@@ -178,15 +186,15 @@ case class Netty4TcpTransportAssociationHandle(channel: Channel,localAddress:Add
   }
 
   override def write(payload: ByteString): Boolean = {
-    if (channel.isActive){
-      if (channel.isWritable){
-        channel.write(Unpooled.wrappedBuffer(payload.asByteBuffer))
-        true
+    if (channel.isWritable && channel.isOpen){
+      if (autoFlush){
+        channel.writeAndFlush(allocator.buffer(payload.size).writeBytes(payload.asByteBuffer))
       }else{
-        channel.flush()
-        false
+        channel.write(allocator.buffer(payload.size).writeBytes(payload.asByteBuffer))
       }
+      true
     }else{
+      channel.flush()
       false
     }
   }
@@ -195,8 +203,9 @@ case class Netty4TcpTransportAssociationHandle(channel: Channel,localAddress:Add
 }
 
 object Netty4TcpTransportAssociationHandle{
-  def apply(channel:Channel):Netty4TcpTransportAssociationHandle = {
+  def apply(channel:Channel,autoFlush:Boolean):Netty4TcpTransportAssociationHandle = {
     this(channel,
+      autoFlush,
       Netty4TcpTransport.inetAddressToActorAddress(channel.localAddress().asInstanceOf[InetSocketAddress]),
       Netty4TcpTransport.inetAddressToActorAddress(channel.remoteAddress().asInstanceOf[InetSocketAddress]))
   }
