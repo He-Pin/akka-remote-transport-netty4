@@ -7,7 +7,8 @@ import akka.actor._
 import akka.remote.transport.AssociationHandle
 import akka.remote.transport.Transport.AssociationEventListener
 
-import scala.concurrent.Promise
+import scala.concurrent.{Future, Promise}
+import scala.util.{Success, Failure}
 
 /**
  * Created by kerr.
@@ -27,8 +28,6 @@ class Netty4TcpTransportMasterActor(scheme: String, configuration: Netty4Configu
       val cause = new Netty4TransportException("netty4 server is not listening now")
       associatePromise.failure(cause)
       log.error(cause,"netty4 tcp transport server is not listening")
-    case Shutdown(shutdownPromise) =>
-
     case Init =>
       serverActor ! Init
       clientActor ! Init
@@ -38,9 +37,25 @@ class Netty4TcpTransportMasterActor(scheme: String, configuration: Netty4Configu
     case associate: Associate =>
       log.debug("associated message received,to remote address :{}",associate.remoteAddress)
       clientActor ! associate
-      //here should check the server bound event
-      //if the server is not bound ,then failed it
-      //update :Checked in the master
+    case Shutdown(shutdownPromise) =>
+      log.debug("request shutdown netty4 remote transport")
+      //here we should shutdown server and the client
+      val serverShutdownPromise = Promise[Boolean]()
+      val clientShutdownPromise = Promise[Boolean]()
+      serverActor ! Shutdown(serverShutdownPromise)
+      clientActor ! Shutdown(clientShutdownPromise)
+      import scala.concurrent.ExecutionContext.Implicits.global
+      val combineFuture = Future.sequence(List(serverShutdownPromise.future,clientShutdownPromise.future))
+      shutdownPromise.completeWith(combineFuture.map(status => status.forall(_==true)))
+      log.debug("waiting server actor & client actor to shutdown")
+      shutdownPromise.future.onComplete{
+        case Failure(e)=>
+          log.error(e,"netty4 tcp transport shutdown failed")
+          self ! PoisonPill
+        case Success(v)=>
+          log.error("netty4 tcp transport shutdown success :{}",v)
+          self ! PoisonPill
+      }
   }
 
 

@@ -26,7 +26,6 @@ class Netty4TcpTransportServerActor(configuration:Netty4Configuration) extends A
   private var serverParentEventLoopGroup: EventLoopGroup = _
   private var serverChildEventLoopGroup: EventLoopGroup = _
   private var allChannelGroup: ChannelGroup = _
-
   private val address: Address = Netty4TcpTransport.inetAddressToActorAddress(
     new InetSocketAddress(configuration.HostAddress,configuration.Port))
 
@@ -138,14 +137,21 @@ class Netty4TcpTransportServerActor(configuration:Netty4Configuration) extends A
     case ChannelInActive(channel) =>
       //add to channel group
       allChannelGroup.remove(channel)
+    case Shutdown(shutdownPromise)=>
+      shutdownPromise.complete{
+        Try{
+          shutdown()
+          true
+        }
+      }
   }
 
   private def shutdown(): Unit ={
     //FIXME handle the shutdown right
     try {
-      allChannelGroup.close()
-      serverParentEventLoopGroup.shutdownGracefully()
-      serverChildEventLoopGroup.shutdownGracefully()
+      allChannelGroup.close().sync()
+      serverParentEventLoopGroup.shutdownGracefully().sync()
+      serverChildEventLoopGroup.shutdownGracefully().sync()
       log.debug("shutdown success")
       context.stop(self)
     } catch {

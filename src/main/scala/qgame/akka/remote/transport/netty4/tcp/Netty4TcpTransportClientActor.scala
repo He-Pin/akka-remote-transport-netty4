@@ -17,7 +17,7 @@ import io.netty.handler.codec.{LengthFieldBasedFrameDecoder, LengthFieldPrepende
 import qgame.akka.remote.transport.netty4.Platform
 
 import scala.util.control.{NoStackTrace, NonFatal}
-import scala.util.{Failure, Success}
+import scala.util.{Try, Failure, Success}
 
 /**
  * Created by kerr.
@@ -43,6 +43,7 @@ class Netty4TcpTransportClientActor(configuration:Netty4Configuration) extends A
           context.stop(self)
       }
   }
+
 
   private def initialized():Actor.Receive ={
     case Associate(remoteAddress,associatePromise)=>
@@ -108,8 +109,26 @@ class Netty4TcpTransportClientActor(configuration:Netty4Configuration) extends A
       associatedChannel += (associatedAddress -> sender())
     case DeAssociated(deAssociatedAddress)=>
       associatedChannel -= deAssociatedAddress
+    case Shutdown(shutdownPromise)=>
+      shutdownPromise.complete{
+        Try{
+          shutdown()
+          true
+        }
+      }
   }
 
+  private def shutdown():Unit = {
+    try {
+      allChannelGroup.close().sync()
+      clientEventLoopGroup.shutdownGracefully().sync()
+      log.debug("shutdown success")
+      context.stop(self)
+    } catch {
+      case NonFatal(e)=>
+        log.error(e,"error occurred when shutdown")
+    }
+  }
 
 
   private def initNettyClient(): Boolean ={

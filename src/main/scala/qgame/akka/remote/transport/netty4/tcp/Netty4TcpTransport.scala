@@ -25,7 +25,7 @@ import scala.util.{Failure, Success}
  */
 class Netty4TcpTransport(system: ExtendedActorSystem, netty4Configuration: Netty4Configuration) extends Transport {
   Netty4TcpTransport.init(system.name, netty4Configuration.HostName, schemeIdentifier)
-  private val tcpTransportMasterActor = system.actorOf(Props.create(classOf[Netty4TcpTransportMasterActor], schemeIdentifier, netty4Configuration), "netty4Transport")
+  private val tcpTransportMasterActor = system.systemActorOf(Props.create(classOf[Netty4TcpTransportMasterActor], schemeIdentifier, netty4Configuration), "netty4Transport")
   tcpTransportMasterActor ! Init
 
   def this(system: ExtendedActorSystem, config: Config) = {
