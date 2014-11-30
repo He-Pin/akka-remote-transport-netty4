@@ -1,7 +1,7 @@
-akka-remote-transport-netty4
+akka-remote-transport-netty4(developing)
 ============================
-Only TCP support now.on UDP no SSL no Docker support,will add Soon
-and the document will udpate when I come home.
+##Only TCP support now.on UDP no SSL no Docker support,will add soon and the document will udpate when I am not that busy.
+
 
 using it like this
 ```
