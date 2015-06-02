@@ -1,4 +1,5 @@
-akka-remote-transport-netty4(developing)
+akka-remote-transport-netty4(deprecated)
+a new implement is based on akka stream.is not opensourced...
 ============================
 ##Only TCP support now.on UDP no SSL no Docker support,will add soon and the document will udpate when I am not that busy.
 
