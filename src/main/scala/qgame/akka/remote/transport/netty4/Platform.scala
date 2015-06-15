@@ -8,9 +8,9 @@ import java.io.File
 object Platform {
   private val osName = sys.props("os.name")
 
-  def isUnix: Boolean =File.separatorChar == '/'
+  def isUnix: Boolean = File.separatorChar == '/'
 
-  def isWindows :Boolean = File.separatorChar == '\\'
+  def isWindows: Boolean = File.separatorChar == '\\'
 
-  def isLinux:Boolean = isUnix && osName.toLowerCase.contains("linux")
+  def isLinux: Boolean = isUnix && osName.toLowerCase.contains("linux")
 }

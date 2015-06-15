@@ -2,23 +2,22 @@ package qgame.akka.remote.transport.netty4.tcp
 
 import java.net._
 import java.util.concurrent.atomic.AtomicReference
-import java.util.concurrent.{CancellationException, TimeUnit}
+import java.util.concurrent.{ CancellationException, TimeUnit }
 
-import akka.actor.{Address, ExtendedActorSystem, Props}
+import akka.actor.{ Address, ExtendedActorSystem, Props }
 import akka.remote.transport.Transport.AssociationEventListener
-import akka.remote.transport.{AssociationHandle, Transport}
+import akka.remote.transport.{ AssociationHandle, Transport }
 import com.typesafe.config.Config
-import io.netty.bootstrap.{Bootstrap, ServerBootstrap}
+import io.netty.bootstrap.{ Bootstrap, ServerBootstrap }
 import io.netty.channel.epoll.EpollChannelOption
-import io.netty.channel.{Channel, ChannelFuture, ChannelFutureListener, ChannelOption}
-import qgame.akka.remote.transport.netty4.RemoteTransportMode.{TCP, UDP, UNKNOWN}
-import qgame.akka.remote.transport.netty4.{Configuration, Platform}
+import io.netty.channel.{ Channel, ChannelFuture, ChannelFutureListener, ChannelOption }
+import qgame.akka.remote.transport.netty4.RemoteTransportMode.{ TCP, UDP, UNKNOWN }
+import qgame.akka.remote.transport.netty4.{ Configuration, Platform }
 
 import scala.concurrent.duration.Duration
-import scala.concurrent.{ExecutionContext, Future, Promise, blocking}
+import scala.concurrent.{ ExecutionContext, Future, Promise, blocking }
 import scala.language.implicitConversions
-import scala.util.{Failure, Success}
-
+import scala.util.{ Failure, Success }
 
 /**
  * Created by kerr.
@@ -114,88 +113,88 @@ object Netty4TcpTransport {
       .option(ChannelOption.SO_REUSEADDR, boolean2Boolean(configuration.TcpReuseADDR))
       .childOption(ChannelOption.TCP_NODELAY, boolean2Boolean(configuration.TcpNoDelay))
       .childOption(ChannelOption.SO_KEEPALIVE, boolean2Boolean(configuration.TcpKeepAlive))
-    if (configuration.SendBufferSize > 0){
-      bootstrap.childOption(ChannelOption.SO_SNDBUF,int2Integer(configuration.SendBufferSize))
+    if (configuration.SendBufferSize > 0) {
+      bootstrap.childOption(ChannelOption.SO_SNDBUF, int2Integer(configuration.SendBufferSize))
     }
-    if (configuration.ReceiveBufferSize > 0){
-      bootstrap.childOption(ChannelOption.SO_RCVBUF,int2Integer(configuration.ReceiveBufferSize))
+    if (configuration.ReceiveBufferSize > 0) {
+      bootstrap.childOption(ChannelOption.SO_RCVBUF, int2Integer(configuration.ReceiveBufferSize))
     }
-    if (configuration.WriteBufferHighWaterMark > 0){
-      bootstrap.childOption(ChannelOption.WRITE_BUFFER_HIGH_WATER_MARK,int2Integer(configuration.WriteBufferHighWaterMark))
+    if (configuration.WriteBufferHighWaterMark > 0) {
+      bootstrap.childOption(ChannelOption.WRITE_BUFFER_HIGH_WATER_MARK, int2Integer(configuration.WriteBufferHighWaterMark))
     }
-    if (configuration.WriteBufferLowWaterMark > 0){
-      bootstrap.childOption(ChannelOption.WRITE_BUFFER_LOW_WATER_MARK,int2Integer(configuration.WriteBufferLowWaterMark))
+    if (configuration.WriteBufferLowWaterMark > 0) {
+      bootstrap.childOption(ChannelOption.WRITE_BUFFER_LOW_WATER_MARK, int2Integer(configuration.WriteBufferLowWaterMark))
     }
-    if (configuration.WriteSpinCount > 0){
-      bootstrap.childOption(ChannelOption.WRITE_SPIN_COUNT,int2Integer(configuration.WriteSpinCount))
+    if (configuration.WriteSpinCount > 0) {
+      bootstrap.childOption(ChannelOption.WRITE_SPIN_COUNT, int2Integer(configuration.WriteSpinCount))
     }
-    if (configuration.MaxMessagesPerRead >0){
-      bootstrap.childOption(ChannelOption.MAX_MESSAGES_PER_READ,int2Integer(configuration.MaxMessagesPerRead))
+    if (configuration.MaxMessagesPerRead > 0) {
+      bootstrap.childOption(ChannelOption.MAX_MESSAGES_PER_READ, int2Integer(configuration.MaxMessagesPerRead))
     }
-    if (native){
-      if (configuration.TcpCork){
-        bootstrap.childOption(EpollChannelOption.TCP_CORK,boolean2Boolean(configuration.TcpCork))
+    if (native) {
+      if (configuration.TcpCork) {
+        bootstrap.childOption(EpollChannelOption.TCP_CORK, boolean2Boolean(configuration.TcpCork))
       }
-      if (configuration.TcpReusePort){
-        bootstrap.childOption(EpollChannelOption.SO_REUSEPORT,boolean2Boolean(configuration.TcpReusePort))
+      if (configuration.TcpReusePort) {
+        bootstrap.childOption(EpollChannelOption.SO_REUSEPORT, boolean2Boolean(configuration.TcpReusePort))
       }
-      if (configuration.TcpKeepIdle > 0){
-        bootstrap.childOption(EpollChannelOption.TCP_KEEPIDLE,int2Integer(configuration.TcpKeepIdle))
+      if (configuration.TcpKeepIdle > 0) {
+        bootstrap.childOption(EpollChannelOption.TCP_KEEPIDLE, int2Integer(configuration.TcpKeepIdle))
       }
-      if (configuration.TcpKeepInternal > 0){
-        bootstrap.childOption(EpollChannelOption.TCP_KEEPINTVL,int2Integer(configuration.TcpKeepInternal))
+      if (configuration.TcpKeepInternal > 0) {
+        bootstrap.childOption(EpollChannelOption.TCP_KEEPINTVL, int2Integer(configuration.TcpKeepInternal))
       }
-      if (configuration.TcpKeepCount > 0){
-        bootstrap.childOption(EpollChannelOption.TCP_KEEPCNT,int2Integer(configuration.TcpKeepCount))
+      if (configuration.TcpKeepCount > 0) {
+        bootstrap.childOption(EpollChannelOption.TCP_KEEPCNT, int2Integer(configuration.TcpKeepCount))
       }
     }
   }
 
-  def setupClientBootStrapOption(bootstrap:Bootstrap,configuration:Netty4Configuration): Unit ={
+  def setupClientBootStrapOption(bootstrap: Bootstrap, configuration: Netty4Configuration): Unit = {
     val native = if (Platform.isLinux && configuration.PreferNative) true else false
-      bootstrap.option(ChannelOption.TCP_NODELAY, boolean2Boolean(configuration.TcpNoDelay))
+    bootstrap.option(ChannelOption.TCP_NODELAY, boolean2Boolean(configuration.TcpNoDelay))
       .option(ChannelOption.SO_KEEPALIVE, boolean2Boolean(configuration.TcpKeepAlive))
-    if (configuration.SendBufferSize > 0){
-      bootstrap.option(ChannelOption.SO_SNDBUF,int2Integer(configuration.SendBufferSize))
+    if (configuration.SendBufferSize > 0) {
+      bootstrap.option(ChannelOption.SO_SNDBUF, int2Integer(configuration.SendBufferSize))
     }
-    if (configuration.ReceiveBufferSize > 0){
-      bootstrap.option(ChannelOption.SO_RCVBUF,int2Integer(configuration.ReceiveBufferSize))
+    if (configuration.ReceiveBufferSize > 0) {
+      bootstrap.option(ChannelOption.SO_RCVBUF, int2Integer(configuration.ReceiveBufferSize))
     }
-    if (configuration.WriteBufferHighWaterMark > 0){
-      bootstrap.option(ChannelOption.WRITE_BUFFER_HIGH_WATER_MARK,int2Integer(configuration.WriteBufferHighWaterMark))
+    if (configuration.WriteBufferHighWaterMark > 0) {
+      bootstrap.option(ChannelOption.WRITE_BUFFER_HIGH_WATER_MARK, int2Integer(configuration.WriteBufferHighWaterMark))
     }
-    if (configuration.WriteBufferLowWaterMark > 0){
-      bootstrap.option(ChannelOption.WRITE_BUFFER_LOW_WATER_MARK,int2Integer(configuration.WriteBufferLowWaterMark))
+    if (configuration.WriteBufferLowWaterMark > 0) {
+      bootstrap.option(ChannelOption.WRITE_BUFFER_LOW_WATER_MARK, int2Integer(configuration.WriteBufferLowWaterMark))
     }
-    if (configuration.WriteSpinCount > 0){
-      bootstrap.option(ChannelOption.WRITE_SPIN_COUNT,int2Integer(configuration.WriteSpinCount))
+    if (configuration.WriteSpinCount > 0) {
+      bootstrap.option(ChannelOption.WRITE_SPIN_COUNT, int2Integer(configuration.WriteSpinCount))
     }
-    if (configuration.MaxMessagesPerRead >0){
-      bootstrap.option(ChannelOption.MAX_MESSAGES_PER_READ,int2Integer(configuration.MaxMessagesPerRead))
+    if (configuration.MaxMessagesPerRead > 0) {
+      bootstrap.option(ChannelOption.MAX_MESSAGES_PER_READ, int2Integer(configuration.MaxMessagesPerRead))
     }
-    if (native){
-      if (configuration.TcpCork){
-        bootstrap.option(EpollChannelOption.TCP_CORK,boolean2Boolean(configuration.TcpCork))
+    if (native) {
+      if (configuration.TcpCork) {
+        bootstrap.option(EpollChannelOption.TCP_CORK, boolean2Boolean(configuration.TcpCork))
       }
-      if (configuration.TcpReusePort){
-        bootstrap.option(EpollChannelOption.SO_REUSEPORT,boolean2Boolean(configuration.TcpReusePort))
+      if (configuration.TcpReusePort) {
+        bootstrap.option(EpollChannelOption.SO_REUSEPORT, boolean2Boolean(configuration.TcpReusePort))
       }
-      if (configuration.TcpKeepIdle > 0){
-        bootstrap.option(EpollChannelOption.TCP_KEEPIDLE,int2Integer(configuration.TcpKeepIdle))
+      if (configuration.TcpKeepIdle > 0) {
+        bootstrap.option(EpollChannelOption.TCP_KEEPIDLE, int2Integer(configuration.TcpKeepIdle))
       }
-      if (configuration.TcpKeepInternal > 0){
-        bootstrap.option(EpollChannelOption.TCP_KEEPINTVL,int2Integer(configuration.TcpKeepInternal))
+      if (configuration.TcpKeepInternal > 0) {
+        bootstrap.option(EpollChannelOption.TCP_KEEPINTVL, int2Integer(configuration.TcpKeepInternal))
       }
-      if (configuration.TcpKeepCount > 0){
-        bootstrap.option(EpollChannelOption.TCP_KEEPCNT,int2Integer(configuration.TcpKeepCount))
+      if (configuration.TcpKeepCount > 0) {
+        bootstrap.option(EpollChannelOption.TCP_KEEPCNT, int2Integer(configuration.TcpKeepCount))
       }
     }
   }
-  
-  def closeChannelGracefully(channel:Channel)(op:Channel=>Any)={
+
+  def closeChannelGracefully(channel: Channel)(op: Channel => Any) = {
     import scala.concurrent.ExecutionContext.Implicits.global
-    channel.disconnect().flatMap(_.close()).onComplete{
-      case Success(closedChannel)=>
+    channel.disconnect().flatMap(_.close()).onComplete {
+      case Success(closedChannel) =>
         op(closedChannel)
       case Failure(e) =>
         //Ignore
@@ -203,7 +202,6 @@ object Netty4TcpTransport {
     }
   }
 }
-
 
 case class Netty4Configuration(configuration: Configuration) {
   val TransportMode = configuration.getString("transport-protocol").map {
@@ -269,7 +267,7 @@ case class Netty4Configuration(configuration: Configuration) {
   val PerformancePreferencesBandwidth = configuration.getInt("performance-preferences-connection-time").getOrElse(throw new IllegalArgumentException("must set up performance-preferences-connection-time in akka.remote.netty4.tcp"))
 
   val TcpCork = configuration.getBoolean("tcp-cork").getOrElse(throw new IllegalArgumentException("must set up tcp-cork in akka.remote.netty4.tcp"))
-  require(!(TcpCork&&TcpNoDelay), "tcp-cork && tcp-nodelay should not set at the same time")
+  require(!(TcpCork && TcpNoDelay), "tcp-cork && tcp-nodelay should not set at the same time")
 
   val TcpReusePort = configuration.getBoolean("tcp-reuse-port").getOrElse(throw new IllegalArgumentException("must set up tcp-reuse-port in akka.remote.netty4.tcp"))
 
